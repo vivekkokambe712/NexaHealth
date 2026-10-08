@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Shield, Copy, Check, Printer, AlertTriangle, CreditCard, Activity, Wifi } from 'lucide-react';
+import { Shield, Copy, Check, Printer, AlertTriangle, CreditCard, Activity, Wifi, Radio } from 'lucide-react';
 
-export default function SmartCardWidget({ cardData, onReportLost }) {
+export default function SmartCardWidget({ cardData, onReportLost, onConnectPhysicalReader, readerConnected, onAttachPhysicalCard, rfidAttached, rfidPairing }) {
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
-  const smartCardId = cardData?.smartCardId || 'SCN-2026-104582';
-  const patientName = cardData?.patientName || cardData?.name || 'Vivek Kokambe';
-  const bloodGroup = cardData?.bloodGroup || 'A+';
-  const dob = cardData?.dateOfBirth ? new Date(cardData.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '1 Jan 2005';
+  const smartCardId = cardData?.smartCardId || 'Not issued';
+  const patientName = cardData?.patientName || cardData?.name || 'Patient name';
+  const bloodGroup = cardData?.bloodGroup || 'Not recorded';
+  const dob = cardData?.dateOfBirth ? new Date(cardData.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not provided';
   const emergencyPhone = cardData?.emergencyContact?.phone || 'Not provided';
-  const allergies = cardData?.allergies && cardData.allergies.length > 0 ? cardData.allergies : ['Penicillin', 'Peanuts'];
-  const cardStatus = cardData?.cardStatus || 'active';
-  const qrValue = cardData?.qrCodeValue || `SMARTCARE://${smartCardId}/${patientName.toUpperCase().replace(/\s+/g, '-')}/${bloodGroup}`;
+  const allergies = cardData?.allergies || [];
+  const cardStatus = cardData?.cardStatus || 'pending';
+  const qrValue = cardData?.qrCodeValue || (cardData?.smartCardId ? `SMARTCARE://${smartCardId}` : '');
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(smartCardId);
@@ -105,7 +105,7 @@ export default function SmartCardWidget({ cardData, onReportLost }) {
               className="cursor-pointer bg-white p-1.5 rounded-lg shadow-md hover:scale-105 transition-transform"
               title="Click to expand QR Code"
             >
-              <QRCodeSVG value={qrValue} size={64} level="M" />
+              {qrValue ? <QRCodeSVG value={qrValue} size={64} level="M" /> : <span className="text-[9px] text-slate-500">Unavailable</span>}
             </div>
             <span className="text-[9px] text-blue-200 mt-1 cursor-pointer hover:underline" onClick={() => setShowQrModal(true)}>
               Tap to expand
@@ -131,6 +131,28 @@ export default function SmartCardWidget({ cardData, onReportLost }) {
 
       {/* Action Buttons (No-print) */}
       <div className="no-print flex flex-wrap items-center justify-center gap-2 pt-2 max-w-lg mx-auto">
+        {onConnectPhysicalReader && (
+          <button
+            type="button"
+            onClick={onConnectPhysicalReader}
+            disabled={readerConnected}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white rounded-lg border border-slate-200 shadow-sm hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>{readerConnected ? 'USB Reader Connected' : 'Connect USB Reader'}</span>
+          </button>
+        )}
+        {onAttachPhysicalCard && (
+          <button
+            type="button"
+            onClick={onAttachPhysicalCard}
+            disabled={!readerConnected || rfidAttached || rfidPairing}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 rounded-lg border border-teal-200 shadow-sm hover:bg-teal-100 transition disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>{rfidAttached ? 'Physical Card Attached' : rfidPairing ? 'Waiting for Card...' : readerConnected ? 'Attach Physical Card' : 'Connect Reader First'}</span>
+          </button>
+        )}
         <button
           onClick={handleCopyId}
           className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-lg border border-slate-200 shadow-sm hover:bg-slate-50 transition"
@@ -171,7 +193,7 @@ export default function SmartCardWidget({ cardData, onReportLost }) {
             <h3 className="text-lg font-bold text-slate-900">Hospital Check-in QR Code</h3>
             <p className="text-xs text-slate-500">Scan at any registered SmartCare kiosk or doctor terminal for fast check-in.</p>
             <div className="flex justify-center p-4 bg-slate-50 rounded-xl border border-slate-100">
-              <QRCodeSVG value={qrValue} size={180} level="H" includeMargin />
+              {qrValue ? <QRCodeSVG value={qrValue} size={180} level="H" includeMargin /> : <span className="text-xs text-slate-500">Card QR unavailable</span>}
             </div>
             <div className="font-mono text-sm font-semibold text-primary">{smartCardId}</div>
             <p className="text-[11px] text-slate-400">Patient: {patientName} • {bloodGroup}</p>

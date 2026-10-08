@@ -3,6 +3,19 @@ import api from '../services/api';
 
 const AuthContext = createContext(null);
 
+const normalizeUser = (user) => {
+  if (!user) return null;
+  const patient = user.patient;
+  return {
+    ...user,
+    id: user.id || user.userId,
+    role: user.role?.toLowerCase(),
+    name: user.name || (patient ? `${patient.firstName} ${patient.lastName}` : ''),
+    bloodGroup: user.bloodGroup || patient?.bloodGroup || null,
+    smartCardId: user.smartCardId || patient?.smartCardId || null,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [roleData, setRoleData] = useState(null);
@@ -23,14 +36,9 @@ export const AuthProvider = ({ children }) => {
           
           // Verify with server
           const res = await api.get('/auth/me');
-          if (res.data.success) {
-            setUser(res.data.user);
-            setRoleData(res.data.roleData);
-            localStorage.setItem('smartcare_user', JSON.stringify(res.data.user));
-            if (res.data.roleData) {
-              localStorage.setItem('smartcare_role_data', JSON.stringify(res.data.roleData));
-            }
-          }
+          const verifiedUser = normalizeUser({ ...JSON.parse(storedUser), ...res.data.user });
+          setUser(verifiedUser);
+          localStorage.setItem('smartcare_user', JSON.stringify(verifiedUser));
         } catch (err) {
           console.warn('Session expired or invalid, clearing stored credentials');
           logout();
@@ -44,36 +52,31 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    if (res.data.success) {
-      setToken(res.data.token);
-      setUser(res.data.user);
-      setRoleData(res.data.roleData);
+    const normalizedUser = normalizeUser(res.data.user);
+    setToken(res.data.token);
+    setUser(normalizedUser);
+    setRoleData(null);
 
-      localStorage.setItem('smartcare_token', res.data.token);
-      localStorage.setItem('smartcare_user', JSON.stringify(res.data.user));
-      if (res.data.roleData) {
-        localStorage.setItem('smartcare_role_data', JSON.stringify(res.data.roleData));
-      }
-      return res.data;
-    }
-    throw new Error(res.data.message || 'Login failed');
+    localStorage.setItem('smartcare_token', res.data.token);
+    localStorage.setItem('smartcare_user', JSON.stringify(normalizedUser));
+    localStorage.removeItem('smartcare_role_data');
+    return { ...res.data, user: normalizedUser };
   };
 
-  const register = async (formData) => {
-    const res = await api.post('/auth/register', formData);
-    if (res.data.success) {
-      setToken(res.data.token);
-      setUser(res.data.user);
-      setRoleData(res.data.roleData);
+  const requestRegistrationOtp = async (email) => {
+    const res = await api.post('/auth/register/request', { email });
+    return res.data;
+  };
 
-      localStorage.setItem('smartcare_token', res.data.token);
-      localStorage.setItem('smartcare_user', JSON.stringify(res.data.user));
-      if (res.data.roleData) {
-        localStorage.setItem('smartcare_role_data', JSON.stringify(res.data.roleData));
-      }
-      return res.data;
-    }
-    throw new Error(res.data.message || 'Registration failed');
+  const verifyRegistrationOtp = async (formData) => {
+    const res = await api.post('/auth/register/verify', {
+      ...formData,
+      role: 'PATIENT',
+    });
+    return {
+      ...res.data,
+      user: normalizeUser(res.data.user),
+    };
   };
 
   const logout = () => {
@@ -103,14 +106,9 @@ export const AuthProvider = ({ children }) => {
   const refreshUser = async () => {
     try {
       const res = await api.get('/auth/me');
-      if (res.data.success) {
-        setUser(res.data.user);
-        setRoleData(res.data.roleData);
-        localStorage.setItem('smartcare_user', JSON.stringify(res.data.user));
-        if (res.data.roleData) {
-          localStorage.setItem('smartcare_role_data', JSON.stringify(res.data.roleData));
-        }
-      }
+      const updatedUser = normalizeUser({ ...user, ...res.data.user });
+      setUser(updatedUser);
+      localStorage.setItem('smartcare_user', JSON.stringify(updatedUser));
     } catch (e) {
       console.error('Failed to refresh user data', e);
     }
@@ -124,7 +122,8 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         login,
-        register,
+        requestRegistrationOtp,
+        verifyRegistrationOtp,
         logout,
         quickDemoLogin,
         refreshUser,

@@ -5,7 +5,7 @@ import MedicalTimeline from '../../components/MedicalTimeline';
 import { FileText, Printer, ShieldAlert } from 'lucide-react';
 
 export default function MedicalRecordsPage() {
-  const { user, roleData } = useAuth();
+  const { user } = useAuth();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +28,7 @@ export default function MedicalRecordsPage() {
 
   const patientInfo = {
     name: user?.name,
-    smartCardId: roleData?.smartCardId,
+    smartCardId: user?.smartCardId,
     bloodGroup: user?.bloodGroup,
   };
 
@@ -39,7 +39,7 @@ export default function MedicalRecordsPage() {
           Digital Medical Records & History
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Chronological clinical consultations, vital sign trends, prescriptions, and laboratory reports linked to Smart Card #{roleData?.smartCardId || 'SCN-2026-104582'}.
+          Chronological clinical consultations, vital sign trends, prescriptions, and laboratory reports linked to Smart Card #{user?.smartCardId || 'not issued'}.
         </p>
       </div>
 

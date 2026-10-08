@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Stethoscope, Star, Calendar, ArrowRight, Award, Clock } from 'lucide-react';
-import api from '../services/api';
+import { getDemoDoctors } from '../services/directoryDemoData';
 
 export default function DoctorDirectoryPage() {
   const [doctors, setDoctors] = useState([]);
@@ -9,22 +9,10 @@ export default function DoctorDirectoryPage() {
   const [search, setSearch] = useState('');
   const [selectedSpec, setSelectedSpec] = useState('');
 
-  const fetchDoctors = async () => {
-    try {
-      setLoading(true);
-      const params = {};
-      if (search) params.search = search;
-      if (selectedSpec) params.specialization = selectedSpec;
-
-      const res = await api.get('/doctors', { params });
-      if (res.data.success) {
-        setDoctors(res.data.doctors);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+  const fetchDoctors = () => {
+    setLoading(true);
+    setDoctors(getDemoDoctors({ search, specialization: selectedSpec }));
+    setLoading(false);
   };
 
   useEffect(() => {

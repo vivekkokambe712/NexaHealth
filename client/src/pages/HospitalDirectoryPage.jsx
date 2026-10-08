@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Building2, Phone, Star, ArrowRight, Filter } from 'lucide-react';
-import api from '../services/api';
+import { getDemoHospitals } from '../services/directoryDemoData';
 
 export default function HospitalDirectoryPage() {
   const [hospitals, setHospitals] = useState([]);
@@ -10,23 +10,10 @@ export default function HospitalDirectoryPage() {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
 
-  const fetchHospitals = async () => {
-    try {
-      setLoading(true);
-      const params = {};
-      if (search) params.search = search;
-      if (selectedCity) params.city = selectedCity;
-      if (selectedDept) params.department = selectedDept;
-
-      const res = await api.get('/hospitals', { params });
-      if (res.data.success) {
-        setHospitals(res.data.hospitals);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+  const fetchHospitals = () => {
+    setLoading(true);
+    setHospitals(getDemoHospitals({ search, city: selectedCity, department: selectedDept }));
+    setLoading(false);
   };
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Stethoscope, Star, Building2, Calendar, Clock, Award, ShieldCheck, ArrowRight, Check } from 'lucide-react';
-import api from '../services/api';
+import { getDemoDoctor } from '../services/directoryDemoData';
 
 export default function DoctorDetailPage() {
   const { id } = useParams();
@@ -9,19 +9,8 @@ export default function DoctorDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDoc = async () => {
-      try {
-        const res = await api.get(`/doctors/${id}`);
-        if (res.data.success) {
-          setDoctor(res.data.doctor);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDoc();
+    setDoctor(getDemoDoctor(id));
+    setLoading(false);
   }, [id]);
 
   if (loading) return <div className="p-12 text-center text-xs text-slate-500">Loading doctor credentials...</div>;

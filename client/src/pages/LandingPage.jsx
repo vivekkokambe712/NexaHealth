@@ -16,8 +16,10 @@ import {
   Stethoscope
 } from 'lucide-react';
 import SmartCardWidget from '../components/SmartCardWidget';
+import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage() {
+  const { user } = useAuth();
   const sampleCard = {
     patientName: 'Vivek Kokambe',
     smartCardId: 'SCN-2026-104582',
@@ -28,6 +30,18 @@ export default function LandingPage() {
     allergies: ['Penicillin', 'Peanuts'],
     cardStatus: 'active',
   };
+  const displayedCard = user?.role === 'patient'
+    ? {
+        patientName: user.name,
+        name: user.name,
+        smartCardId: user.smartCardId,
+        dateOfBirth: user.patient?.dateOfBirth,
+        bloodGroup: user.bloodGroup,
+        emergencyContact: user.patient?.emergencyContact,
+        allergies: user.patient?.allergies || [],
+        cardStatus: user.status?.toLowerCase() || 'active',
+      }
+    : sampleCard;
 
   return (
     <div className="space-y-20 pb-16">
@@ -93,7 +107,7 @@ export default function LandingPage() {
               <div className="relative mx-auto max-w-md">
                 <div className="absolute -inset-2 bg-gradient-to-r from-blue-600 to-teal-500 rounded-3xl blur-xl opacity-20 animate-pulse"></div>
                 <div className="relative">
-                  <SmartCardWidget cardData={sampleCard} />
+                  <SmartCardWidget cardData={displayedCard} />
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Building2, MapPin, Phone, Mail, Star, Clock, CheckCircle2, Stethoscope, ArrowRight } from 'lucide-react';
-import api from '../services/api';
+import { getDemoHospitalDetails } from '../services/directoryDemoData';
 
 export default function HospitalDetailPage() {
   const { id } = useParams();
@@ -9,19 +9,8 @@ export default function HospitalDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchHospital = async () => {
-      try {
-        const res = await api.get(`/hospitals/${id}`);
-        if (res.data.success) {
-          setData(res.data);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchHospital();
+    setData(getDemoHospitalDetails(id));
+    setLoading(false);
   }, [id]);
 
   if (loading) {

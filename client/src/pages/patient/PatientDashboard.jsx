@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -15,11 +15,19 @@ import {
   CheckCircle2,
   AlertCircle,
   Activity,
-  Plus
+  Plus,
+  Radio,
+  X
 } from 'lucide-react';
 
+const demoMedicalHistory = [
+  { date: '18 Sep 2026', title: 'Routine wellness review', detail: 'Vitals within normal range; follow-up suggested in six months.' },
+  { date: '02 Jun 2026', title: 'Seasonal allergy consultation', detail: 'Demo note: mild seasonal symptoms; hydration and rest advised.' },
+  { date: '11 Feb 2026', title: 'Annual health screening', detail: 'Demo note: screening completed; no urgent follow-up indicated.' },
+];
+
 export default function PatientDashboard() {
-  const { user, roleData } = useAuth();
+  const { user } = useAuth();
   const { lastQueueEvent } = useSocket();
 
   const [cardData, setCardData] = useState(null);
@@ -27,6 +35,13 @@ export default function PatientDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [recentRecords, setRecentRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rfidStatus, setRfidStatus] = useState({ isAttached: false, isPairing: false });
+  const [rfidMessage, setRfidMessage] = useState('');
+  const [showRfidHistory, setShowRfidHistory] = useState(false);
+  const scanCursor = useRef(new Date().toISOString());
+  const serialPort = useRef(null);
+  const serialReader = useRef(null);
+  const [readerConnected, setReaderConnected] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -60,6 +75,126 @@ export default function PatientDashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => () => {
+    const reader = serialReader.current;
+    const port = serialPort.current;
+    if (reader) {
+      reader.cancel().finally(() => port?.close().catch(() => {}));
+    } else {
+      port?.close().catch(() => {});
+    }
+  }, []);
+
+  const processSerialUid = async (uid) => {
+    try {
+      const response = await api.post('/patients/rfid/scan', { uid });
+      if (response.data.status === 'attached') {
+        setRfidStatus({ isAttached: true, isPairing: false });
+        setRfidMessage(`RFID card ${uid} attached to your account.`);
+      } else if (response.data.status === 'detected') {
+        setRfidMessage('Your physical card was detected by the reader.');
+        setShowRfidHistory(true);
+      }
+    } catch (error) {
+      setRfidMessage(error.response?.data?.message || 'Could not process the RFID scan.');
+    }
+  };
+
+  const readSerialPort = async (port) => {
+    const decoder = new TextDecoderStream();
+    const readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+    const reader = decoder.readable.getReader();
+    serialReader.current = reader;
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const match = line.trim().match(/^RFID_UID:([0-9a-f:-]+)$/i);
+          if (match) await processSerialUid(match[1]);
+        }
+      }
+    } catch {
+      setReaderConnected(false);
+      setRfidMessage('USB RFID reader disconnected.');
+    } finally {
+      reader.releaseLock();
+      await readableClosed;
+    }
+  };
+
+  const handleConnectPhysicalReader = async () => {
+    if (!navigator.serial) {
+      setRfidMessage('USB serial requires Chrome or Edge on localhost.');
+      return;
+    }
+
+    try {
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      serialPort.current = port;
+      setReaderConnected(true);
+      setRfidMessage('USB reader connected. Start pairing, then present the card.');
+      readSerialPort(port);
+    } catch (error) {
+      if (error.name !== 'NotFoundError') {
+        setRfidMessage(error.message || 'Could not connect to the USB RFID reader.');
+      }
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    const pollRfid = async () => {
+      try {
+        const [statusResponse, scansResponse] = await Promise.all([
+          api.get('/patients/rfid/status'),
+          api.get('/patients/rfid/scans', { params: { after: scanCursor.current } }),
+        ]);
+
+        if (!active) return;
+        setRfidStatus(statusResponse.data);
+
+        for (const event of scansResponse.data.events || []) {
+          scanCursor.current = event.scannedAt;
+          if (event.type === 'ATTACHED') {
+            setRfidMessage('Physical RFID card attached to your patient account.');
+          } else if (event.type === 'DETECTED') {
+            setRfidMessage('Your physical card was detected by the reader.');
+            setShowRfidHistory(true);
+          }
+        }
+      } catch {
+        // RFID endpoints become available after the v1 database migration is applied.
+      }
+    };
+
+    pollRfid();
+    const intervalId = setInterval(pollRfid, 1500);
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const handleAttachPhysicalCard = async () => {
+    setRfidMessage('');
+    scanCursor.current = new Date().toISOString();
+    try {
+      const response = await api.post('/patients/rfid/pairing');
+      setRfidStatus({ isAttached: false, isPairing: true, pairingExpiresAt: response.data.expiresAt });
+      setRfidMessage('Ready to pair. Present your RFID card to the reader within 90 seconds.');
+    } catch (error) {
+      setRfidMessage(error.response?.data?.message || 'Could not start RFID pairing. Please try again.');
+    }
+  };
 
   // Update on socket queue events
   useEffect(() => {
@@ -98,7 +233,7 @@ export default function PatientDashboard() {
             Welcome back, {user?.name}
           </h1>
           <p className="text-xs sm:text-sm text-blue-100 max-w-xl">
-            Smart Card ID: <span className="font-mono font-bold text-white bg-white/20 px-2 py-0.5 rounded">{cardData?.smartCardId || roleData?.smartCardId || 'SCN-2026-104582'}</span> • Blood Group: <span className="font-bold text-rose-300">{user?.bloodGroup || 'A+'}</span>
+            Smart Card ID: <span className="font-mono font-bold text-white bg-white/20 px-2 py-0.5 rounded">{cardData?.smartCardId || user?.smartCardId || 'Not issued'}</span> • Blood Group: <span className="font-bold text-rose-300">{user?.bloodGroup || 'Not recorded'}</span>
           </p>
         </div>
 
@@ -130,7 +265,20 @@ export default function PatientDashboard() {
               Full Card Details →
             </Link>
           </div>
-          <SmartCardWidget cardData={cardData || { name: user?.name, bloodGroup: user?.bloodGroup, smartCardId: roleData?.smartCardId }} />
+          <SmartCardWidget cardData={cardData || {
+            name: user?.name,
+            patientName: user?.name,
+            bloodGroup: user?.bloodGroup,
+            smartCardId: user?.smartCardId,
+            dateOfBirth: user?.patient?.dateOfBirth,
+            allergies: user?.patient?.allergies,
+            emergencyContact: user?.patient?.emergencyContact,
+          }} onConnectPhysicalReader={handleConnectPhysicalReader} readerConnected={readerConnected} onAttachPhysicalCard={handleAttachPhysicalCard} rfidAttached={rfidStatus.isAttached} rfidPairing={rfidStatus.isPairing} />
+          {rfidMessage && (
+            <p role="status" className="text-center text-xs text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+              {rfidMessage}
+            </p>
+          )}
         </div>
 
         {/* Right: Live Queue & Next Appointment */}
@@ -226,6 +374,37 @@ export default function PatientDashboard() {
           </div>
         )}
       </div>
+
+      {showRfidHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="rfid-history-title" className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-100">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-1 rounded">
+                  <Radio className="w-3 h-3" /> Demo data only
+                </div>
+                <h2 id="rfid-history-title" className="mt-2 text-lg font-bold text-slate-900">Physical card detected</h2>
+                <p className="text-xs text-slate-500">{user?.name} · {cardData?.smartCardId || user?.smartCardId}</p>
+              </div>
+              <button type="button" onClick={() => setShowRfidHistory(false)} aria-label="Close medical history" className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              {demoMedicalHistory.map((entry) => (
+                <div key={entry.date} className="border-l-2 border-teal-500 pl-3 py-1">
+                  <p className="text-[10px] text-slate-400">{entry.date}</p>
+                  <h3 className="text-sm font-semibold text-slate-800">{entry.title}</h3>
+                  <p className="text-xs text-slate-600">{entry.detail}</p>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-5">
+              <button type="button" onClick={() => setShowRfidHistory(false)} className="w-full py-2 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-dark">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

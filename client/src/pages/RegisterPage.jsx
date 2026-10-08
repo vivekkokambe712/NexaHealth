@@ -4,12 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { User, Stethoscope, Building2, CheckCircle2, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { requestRegistrationOtp, verifyRegistrationOtp } = useAuth();
   const navigate = useNavigate();
 
   const [role, setRole] = useState('patient'); // 'patient' | 'doctor' | 'hospital'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
   const [successData, setSuccessData] = useState(null);
 
   // Form State
@@ -44,39 +46,36 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (role !== 'patient') {
+      setError('Patient OTP registration is connected. Doctor and hospital registration will be available when their v1 profiles are supported.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const payload = {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        phone: formData.phone,
-        role,
-      };
-
-      if (role === 'patient') {
-        payload.dateOfBirth = formData.dateOfBirth;
-        payload.gender = formData.gender;
-        payload.bloodGroup = formData.bloodGroup;
-        payload.allergies = formData.allergies ? formData.allergies.split(',').map(s => s.trim()) : [];
-        payload.emergencyContact = {
-          name: formData.emergencyName || 'Next of Kin',
-          phone: formData.emergencyPhone || formData.phone,
-        };
-      } else if (role === 'doctor') {
-        payload.specialization = formData.specialization;
-        payload.qualifications = formData.qualifications.split(',').map(s => s.trim());
-        payload.licenseNumber = formData.licenseNumber || `MCI-REG-${Math.floor(10000 + Math.random() * 90000)}`;
-        payload.consultationFee = Number(formData.consultationFee);
-      } else if (role === 'hospital') {
-        payload.registrationNumber = formData.registrationNumber || `HOSP-REG-${Math.floor(1000 + Math.random() * 9000)}`;
-        payload.city = formData.city;
-        payload.state = formData.state;
-        payload.address = formData.address || 'Medical Health Enclave';
+      if (!otpSent) {
+        await requestRegistrationOtp(formData.email);
+        setOtpSent(true);
+        return;
       }
 
-      const res = await register(payload);
+      const [firstName, ...lastNameParts] = formData.name.trim().split(/\s+/);
+      const res = await verifyRegistrationOtp({
+        email: formData.email,
+        otp,
+        password: formData.password,
+        phone: formData.phone,
+        firstName,
+        lastName: lastNameParts.join(' ') || firstName,
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender,
+        bloodGroup: formData.bloodGroup,
+        allergies: formData.allergies ? formData.allergies.split(',').map((allergy) => allergy.trim()).filter(Boolean) : [],
+        emergencyContactName: formData.emergencyName,
+        emergencyContactPhone: formData.emergencyPhone,
+      });
       setSuccessData(res);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Registration failed.');
@@ -97,12 +96,13 @@ export default function RegisterPage() {
           <p className="text-xs text-slate-600">
             Welcome to SmartCare Health Network, <strong>{successData.user.name}</strong>.
           </p>
+          <p className="text-xs text-slate-600">Your email is verified and your patient account is ready. Sign in to continue.</p>
 
-          {role === 'patient' && successData.roleData?.smartCardId && (
+          {successData.user.smartCardId && (
             <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-left space-y-2">
               <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Generated Smart Card ID</span>
               <div className="font-mono text-xl font-extrabold text-primary select-all">
-                {successData.roleData.smartCardId}
+                {successData.user.smartCardId}
               </div>
               <p className="text-[11px] text-slate-500">
                 Your card has been provisioned and is ready for hospital check-ins and appointments.
@@ -111,10 +111,10 @@ export default function RegisterPage() {
           )}
 
           <button
-            onClick={() => navigate(`/${role}/dashboard`)}
+            onClick={() => navigate('/login')}
             className="w-full py-3 bg-primary text-white font-bold rounded-xl text-xs hover:bg-primary-dark transition flex items-center justify-center space-x-2"
           >
-            <span>Proceed to {role} Dashboard</span>
+            <span>Continue to Sign In</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -126,12 +126,16 @@ export default function RegisterPage() {
     <div className="max-w-xl mx-auto px-4 py-12 space-y-8">
       {/* Header */}
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-extrabold text-slate-900">Join SmartCare Health Network</h1>
-        <p className="text-xs text-slate-500">Receive your instant digital health identity or affiliate your practice</p>
+        <h1 className="text-3xl font-extrabold text-slate-900">
+          {otpSent ? 'Verify Your Email' : 'Join SmartCare Health Network'}
+        </h1>
+        <p className="text-xs text-slate-500">
+          {otpSent ? 'Enter the verification code we sent to your email.' : 'Receive your instant digital health identity or affiliate your practice'}
+        </p>
       </div>
 
       {/* Role Selection Tabs */}
-      <div className="grid grid-cols-3 gap-2 bg-slate-200/60 p-1.5 rounded-2xl">
+      {!otpSent && <div className="grid grid-cols-3 gap-2 bg-slate-200/60 p-1.5 rounded-2xl">
         <button
           type="button"
           onClick={() => setRole('patient')}
@@ -164,7 +168,7 @@ export default function RegisterPage() {
           <Building2 className="w-4 h-4" />
           <span>Hospital</span>
         </button>
-      </div>
+      </div>}
 
       {/* Form Card */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-100 space-y-5">
@@ -176,6 +180,8 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {!otpSent ? (
+            <>
           {/* Universal fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -412,6 +418,35 @@ export default function RegisterPage() {
               </div>
             </>
           )}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-center text-slate-600">Code sent to <strong>{formData.email}</strong></p>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1" htmlFor="registration-otp">Verification Code</label>
+                <input
+                  id="registration-otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  placeholder="Enter the 6-digit code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-center tracking-[0.3em] focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => { setOtpSent(false); setOtp(''); setError(''); }}
+                className="w-full text-center text-[11px] font-semibold text-primary hover:underline"
+              >
+                Change registration details
+              </button>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -422,7 +457,7 @@ export default function RegisterPage() {
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : (
               <>
-                <span>Complete Registration</span>
+                <span>{otpSent ? 'Verify Code & Create Account' : 'Send Verification Code'}</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

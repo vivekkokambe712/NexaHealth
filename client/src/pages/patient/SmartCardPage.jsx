@@ -71,9 +71,9 @@ export default function SmartCardPage() {
             <h3>Insurance Affiliation</h3>
           </div>
           <div className="text-xs text-slate-600 space-y-1">
-            <p><strong>Provider:</strong> {cardData?.insuranceDetails?.provider || 'Star Health Premier'}</p>
-            <p><strong>Policy Number:</strong> {cardData?.insuranceDetails?.policyNumber || 'SHP-2026-904128'}</p>
-            <p><strong>Max Cover:</strong> ₹{cardData?.insuranceDetails?.coverageAmount?.toLocaleString('en-IN') || '10,00,000'}</p>
+            <p><strong>Provider:</strong> {cardData?.insuranceDetails?.provider || 'Not on file'}</p>
+            <p><strong>Policy Number:</strong> {cardData?.insuranceDetails?.policyNumber || 'Not on file'}</p>
+            <p><strong>Max Cover:</strong> {cardData?.insuranceDetails?.coverageAmount ? `₹${cardData.insuranceDetails.coverageAmount.toLocaleString('en-IN')}` : 'Not on file'}</p>
           </div>
         </div>
       </div>
